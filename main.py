@@ -7,11 +7,16 @@ dotenv_path = find_dotenv()
 load_dotenv(dotenv_path)
 
 
-OMDB_API_KEY = os.getenv("OMDB_API_KEY")
+TMDB_READ_ACCESS_TOKEN = os.getenv("TMDB_READ_ACCESS_TOKEN")
 
 
-request_url = f"http://www.omdbapi.com/?apikey={OMDB_API_KEY}&y=2006&s=duna&plot=full"
-response = requests.get(request_url)
+url = "https://api.themoviedb.org/3/authentication"
 
-print(response.json())
-print(response.status_code)
+headers = {
+    "accept": "application/json",
+    "Authorization": f"Bearer {TMDB_READ_ACCESS_TOKEN}"
+}
+
+response = requests.get(url, headers=headers)
+
+print(response.text)
