@@ -4,6 +4,7 @@ import pendulum
 from airflow.decorators import dag, task
 import requests
 import xmltodict
+import json
 
 import requests
 import os
@@ -23,6 +24,8 @@ headers = {
     "Authorization": f"Bearer {TMDB_READ_ACCESS_TOKEN}"
 }
 
+# configure a dag
+
 
 @dag(
     dag_id='movies_summary',
@@ -31,13 +34,52 @@ headers = {
     catchup=False
 )
 def movies_summary():
+    # create a db connection task
+    create_database = SqliteOperator(
+        task_id="create_table_sqlite",
+        sql=r"""
+    CREATE TABLE IF NOT EXISTS movies (
+        id TEXT PRIMARY KEY
+        , title TEXT
+        , description TEXT
+        , original_lang TEXT
+        , vote_average TEXT
+        , poster TEXT
+        , release_date DATE
+    )
+    """,
+        sqlite_conn_id="popmoviesid"
+    )
+    # get data from api
+
     @task()
     def get_movies():
         response = requests.get(url, headers=headers)
         data = response.text
         return data
+    # connect operators
+    popular_movies = get_movies()  # this is step nr2
+    create_database.set_downstream(popular_movies)  # this is step nr1
 
-    movies = get_movies()
+    @task()
+    def load_movies(movies):
+        hook = SqliteHook(sqlite_conn_id="popmoviesid")
+        new_movies = []
+        movies_data = json.loads(movies)
+        for movie in movies_data.get("results", []):
+            new_movies.append([
+                str(movie.get("id")),
+                movie.get("title"),
+                movie.get("overview"),
+                movie.get("original_language"),
+                str(movie.get("vote_average")),
+                movie.get("poster_path"),
+                movie.get("release_date")
+            ])
+        fields = ["id", "title", "description",
+                  "original_lang", "vote_average", "poster", "release_date"]
+        hook.insert_rows(table="movies", rows=new_movies, target_fields=fields)
+    load_movies(popular_movies)  # this is step #3
 
 
 summary = movies_summary()
